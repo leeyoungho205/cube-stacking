@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>쌓기나무 - 앞·옆·위에서 본 모습</title>
+<style>
+  body {
+    font-family: 'Malgun Gothic', sans-serif;
+    background: #f5f5f5;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+  }
+  h1 { color: #333; }
+  .controls { margin: 20px 0; }
+  button {
+    padding: 8px 16px;
+    margin: 0 4px;
+    background: #4CAF50;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover { background: #45a049; }
+  .layout {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 30px;
+    align-items: flex-start;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+  .panel h3 { margin: 0 0 8px; }
+  .ortho-group {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  canvas { background: #fafafa; display: block; }
+</style>
+</head>
+<body>
+  <h1>쌓기나무 시각화</h1>
+  <div class="controls">
+    <button id="sample1Btn">샘플 1</button>
+    <button id="sample2Btn">샘플 2</button>
+    <button id="resetBtn">초기화</button>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h3>입체 (등각 투영)</h3>
+      <canvas id="isoCanvas" width="400" height="400"></canvas>
+      <p style="font-size:13px;color:#666;">큐브 윗면을 클릭하면 추가/제거됩니다</p>
+    </div>
+
+    <div class="ortho-group">
+      <div class="panel">
+        <h3>앞에서 본 모습 (Perfil)</h3>
+        <canvas id="perfilCanvas" width="160" height="160"></canvas>
+      </div>
+      <div class="panel">
+        <h3>옆에서 본 모습 (Alzado)</h3>
+        <canvas id="alzadoCanvas" width="160" height="160"></canvas>
+      </div>
+      <div class="panel">
+        <h3>위에서 본 모습 (Planta)</h3>
+        <canvas id="plantaCanvas" width="160" height="160"></canvas>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===== 회원님이 업로드하신 script.js 코드 그대로 ===== */
+const GRID_SIZE = 3;
+const CUBE_EDGE_LENGTH = 30;
+const ORTHO_CELL_SIZE = 40;
+
+const TOP_COLOR = "rgba(100, 150, 255, 0.9)";
+const SIDE_COLOR = "rgba(100, 220, 100, 0.9)";
+const FRONT_COLOR = "rgba(255, 100, 100, 0.9)";
+const LINE_COLOR = "#333";
+
+const isoCanvas = document.getElementById('isoCanvas');
+const perfilCanvas = document.getElementById('perfilCanvas');
+const alzadoCanvas = document.getElementById('alzadoCanvas');
+const plantaCanvas = document.getElementById('plantaCanvas');
+
+const isoCtx = isoCanvas.getContext('2d');
+const perfilCtx = perfilCanvas.getContext('2d');
+const alzadoCtx = alzadoCanvas.getContext('2d');
+const plantaCtx = plantaCanvas.getContext('2d');
+
+const sample1Btn = document.getElementById('sample1Btn');
+const sample2Btn = document.getElementById('sample2Btn');
+const resetBtn = document.getElementById('resetBtn');
+
+let cubes = [];
+
+function initializeCubes() {
+    cubes = [];
+    for (let x = 0; x < GRID_SIZE; x++) {
+        cubes[x] = [];
+        for (let y = 0; y < GRID_SIZE; y++) {
+            cubes[x][y] = [];
+            for (let z = 0; z < GRID_SIZE; z++) {
+                cubes[x][y][z] = false;
+            }
+        }
+    }
+}
+
+const angle = Math.PI / 6;
+const scaleX = CUBE_EDGE_LENGTH * Math.cos(angle);
+const scaleY = CUBE_EDGE_LENGTH * Math.sin(angle);
+const scaleZ = CUBE_EDGE_LENGTH * 0.9;
+
+const originX = isoCanvas.width / 2;
+const originY = isoCanvas.height / 4;
+
+function projectIso(x, y, z) {
+    const screenX = originX + (x - y) * scaleX;
+    const screenY = originY + (x + y) * scaleY - z * scaleZ;
+    return { x: screenX, y: screenY };
+}
+
+function drawIsoCube(ctx, x, y, z) {
+    if (!cubes[x][y][z]) return;
+    const start = projectIso(x, y, z);
+    const p = [
+        start,
+        projectIso(x + 1, y, z),
+        projectIso(x + 1, y + 1, z),
+        projectIso(x, y + 1, z),
+        projectIso(x, y, z + 1),
+        projectIso(x + 1, y, z + 1),
+        projectIso(x + 1, y + 1, z + 1),
+        projectIso(x, y + 1, z + 1)
+    ];
+    ctx.strokeStyle = LINE_COLOR;
+    ctx.lineWidth = 1;
+
+    ctx.fillStyle = TOP_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(p[4].x, p[4].y);
+    ctx.lineTo(p[5].x, p[5].y);
+    ctx.lineTo(p[6].x, p[6].y);
+    ctx.lineTo(p[7].x, p[7].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = SIDE_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(p[3].x, p[3].y);
+    ctx.lineTo(p[2].x, p[2].y);
+    ctx.lineTo(p[6].x, p[6].y);
+    ctx.lineTo(p[7].x, p[7].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = FRONT_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(p[0].x, p[0].y);
+    ctx.lineTo(p[1].x, p[1].y);
+    ctx.lineTo(p[5].x, p[5].y);
+    ctx.lineTo(p[4].x, p[4].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+function drawIsoView() {
+    isoCtx.clearRect(0, 0, isoCanvas.width, isoCanvas.height);
+    for (let z = 0; z < GRID_SIZE; z++) {
+        for (let y = GRID_SIZE - 1; y >= 0; y--) {
+            for (let x = 0; x < GRID_SIZE; x++) {
+                if (cubes[x][y][z]) drawIsoCube(isoCtx, x, y, z);
+            }
+        }
+    }
+    drawIsoGridBase(isoCtx);
+}
+
+function drawIsoGridBase(ctx) {
+    ctx.strokeStyle = "#aaa";
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= GRID_SIZE; i++) {
+        let p1 = projectIso(0, i, 0);
+        let p2 = projectIso(GRID_SIZE, i, 0);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        p1 = projectIso(i, 0, 0);
+        p2 = projectIso(i, GRID_SIZE, 0);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+    }
+}
+
+function drawOrthoView(ctx, canvas, data, color) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    const cellSize = ORTHO_CELL_SIZE;
+    const gridViewSize = GRID_SIZE * cellSize;
+    const offsetX = (canvas.width - gridViewSize) / 2;
+    const offsetY = (canvas.height - gridViewSize) / 2;
+    ctx.fillStyle = color;
+    for (let row = 0; row < GRID_SIZE; row++) {
+        for (let col = 0; col < GRID_SIZE; col++) {
+            const xPos = offsetX + col * cellSize;
+            const yPos = offsetY + (GRID_SIZE - 1 - row) * cellSize;
+            if (data[col] && data[col][row]) {
+                ctx.fillRect(xPos, yPos, cellSize, cellSize);
+                ctx.strokeRect(xPos, yPos, cellSize, cellSize);
+            }
+        }
+    }
+    ctx.strokeStyle = LINE_COLOR;
+    ctx.strokeRect(offsetX, offsetY, gridViewSize, gridViewSize);
+}
+
+function drawPlantaView() {
+    const plantaData = [];
+    for (let x = 0; x < GRID_SIZE; x++) {
+        plantaData[x] = [];
+        for (let y = 0; y < GRID_SIZE; y++) {
+            plantaData[x][y] = false;
+            for (let z = 0; z < GRID_SIZE; z++) {
+                if (cubes[x][y][z]) { plantaData[x][y] = true; break; }
+            }
+        }
+    }
+    const cellSize = ORTHO_CELL_SIZE;
+    const gridViewSize = GRID_SIZE * cellSize;
+    const offsetX = (plantaCanvas.width - gridViewSize) / 2;
+    const offsetY = (plantaCanvas.height - gridViewSize) / 2;
+    plantaCtx.clearRect(0, 0, plantaCanvas.width, plantaCanvas.height);
+    plantaCtx.fillStyle = TOP_COLOR;
+    plantaCtx.strokeStyle = '#aaa';
+    plantaCtx.lineWidth = 1;
+    for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+            const xPos = offsetX + x * cellSize;
+            const yPos = offsetY + y * cellSize;
+            if (plantaData[x][y]) {
+                plantaCtx.fillRect(xPos, yPos, cellSize, cellSize);
+                plantaCtx.strokeRect(xPos, yPos, cellSize, cellSize);
+            }
+        }
+    }
+    plantaCtx.strokeStyle = LINE_COLOR;
+    plantaCtx.strokeRect(offsetX, offsetY, gridViewSize, gridViewSize);
+}
+
+function drawPerfilView() {
+    const perfilData = [];
+    for (let x = 0; x < GRID_SIZE; x++) {
+        perfilData[x] = [];
+        for (let z = 0; z < GRID_SIZE; z++) {
+            perfilData[x][z] = false;
+            for (let y = 0; y < GRID_SIZE; y++) {
+                if (cubes[x][y][z]) { perfilData[x][z] = true; break; }
+            }
+        }
+    }
+    drawOrthoView(perfilCtx, perfilCanvas, perfilData, FRONT_COLOR);
+}
+
+function drawAlzadoView() {
+    const alzadoData = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+        alzadoData[y] = [];
+        for (let z = 0; z < GRID_SIZE; z++) {
+            alzadoData[y][z] = false;
+            for (let x = 0; x < GRID_SIZE; x++) {
+                if (cubes[x][y][z]) { alzadoData[y][z] = true; break; }
+            }
+        }
+    }
+    drawOrthoView(alzadoCtx, alzadoCanvas, alzadoData, SIDE_COLOR);
+}
+
+function drawAll() {
+    drawIsoView();
+    drawPlantaView();
+    drawPerfilView();
+    drawAlzadoView();
+}
+
+isoCanvas.addEventListener('click', (event) => {
+    const rect = isoCanvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+    let clickedCube = null;
+    let highestZ = -1;
+    for (let z = GRID_SIZE - 1; z >= 0; z--) {
+        for (let y = 0; y < GRID_SIZE; y++) {
+            for (let x = GRID_SIZE - 1; x >= 0; x--) {
+                const topFaceCenter = projectIso(x + 0.5, y + 0.5, z + 1);
+                const tolerance = CUBE_EDGE_LENGTH * 0.7;
+                if (Math.abs(clickX - topFaceCenter.x) < tolerance &&
+                    Math.abs(clickY - topFaceCenter.y) < tolerance) {
+                    if (cubes[x][y][z]) {
+                        clickedCube = { x, y, z, remove: true };
+                        z = -1; break;
+                    } else if (z === 0 || (z > 0 && cubes[x][y][z-1])) {
+                        if (z > highestZ) {
+                            clickedCube = { x, y, z, remove: false };
+                            highestZ = z;
+                        }
+                    }
+                }
+            }
+            if (clickedCube && clickedCube.remove) break;
+        }
+        if (clickedCube && clickedCube.remove) break;
+    }
+    if (clickedCube) {
+        if (clickedCube.remove) {
+            cubes[clickedCube.x][clickedCube.y][clickedCube.z] = false;
+        } else {
+            cubes[clickedCube.x][clickedCube.y][clickedCube.z] = true;
+        }
+        drawAll();
+    }
+});
+
+sample1Btn.addEventListener('click', () => {
+    initializeCubes();
+    cubes[0][0][0] = true;
+    cubes[1][0][0] = true;
+    cubes[2][0][0] = true;
+    cubes[2][1][0] = true;
+    cubes[2][2][0] = true;
+    cubes[2][2][1] = true;
+    drawAll();
+});
+
+sample2Btn.addEventListener('click', () => {
+    initializeCubes();
+    cubes[0][0][0] = true;
+    cubes[1][0][0] = true;
+    cubes[1][1][0] = true;
+    cubes[2][0][0] = true;
+    cubes[2][1][0] = true;
+    cubes[2][2][0] = true;
+    cubes[1][1][1] = true;
+    cubes[2][1][1] = true;
+    cubes[2][2][1] = true;
+    cubes[2][2][2] = true;
+    drawAll();
+});
+
+resetBtn.addEventListener('click', () => {
+    initializeCubes();
+    drawAll();
+});
+
+initializeCubes();
+drawAll();
+</script>
+</body>
+</html>
